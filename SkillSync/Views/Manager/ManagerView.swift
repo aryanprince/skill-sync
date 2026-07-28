@@ -60,7 +60,7 @@ struct ManagerView: View {
         case .catalog:
             CatalogView()
         case .mcpServers:
-            MCPPlaceholderView()
+            MCPView()
         }
     }
 }

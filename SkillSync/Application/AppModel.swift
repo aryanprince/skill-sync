@@ -22,6 +22,12 @@ final class AppModel: ObservableObject {
     @Published private(set) var catalogError: String?
     @Published private(set) var isSearchingCatalog = false
     @Published private(set) var isRunningSkillsCommand = false
+    @Published private(set) var configuredMCPServers: [ConfiguredMCPServer] = []
+    @Published private(set) var isLoadingMCPServers = false
+    @Published private(set) var mcpRegistryResults: [RegistryMCPServer] = []
+    @Published private(set) var isSearchingMCPRegistry = false
+    @Published private(set) var mcpError: String?
+    @Published private(set) var isRunningMCPCommand = false
 
     private let watchedRootsStore: WatchedRootsStore
     private let scanner: WorkspaceScanner
@@ -29,6 +35,8 @@ final class AppModel: ObservableObject {
     private let executor: ReconciliationExecutor
     private let catalogClient: SkillsCatalogClient
     private let skillsCLI: SkillsCLI
+    private let mcpService: MCPService
+    private let mcpRegistryClient: MCPRegistryClient
     private var hasBootstrapped = false
 
     init(
@@ -42,6 +50,8 @@ final class AppModel: ObservableObject {
         self.executor = ReconciliationExecutor(fileSystem: fileSystem)
         self.catalogClient = SkillsCatalogClient()
         self.skillsCLI = SkillsCLI()
+        self.mcpService = MCPService()
+        self.mcpRegistryClient = MCPRegistryClient()
     }
 
     var globalWorkspace: Workspace? {
@@ -202,6 +212,71 @@ final class AppModel: ObservableObject {
             await refresh()
         } catch {
             activityMessage = "Update failed: \(error.localizedDescription)"
+        }
+    }
+
+    func refreshMCPServers() async {
+        guard !isLoadingMCPServers else { return }
+        isLoadingMCPServers = true
+        let locations: [MCPInstallLocation] =
+            [.global]
+            + projectWorkspaces.map { .project($0.rootURL) }
+        configuredMCPServers = await mcpService.list(locations: locations)
+        isLoadingMCPServers = false
+    }
+
+    func searchMCPRegistry(query: String) async {
+        let normalized = query.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard normalized.count >= 2 else {
+            mcpRegistryResults = []
+            mcpError = nil
+            isSearchingMCPRegistry = false
+            return
+        }
+
+        isSearchingMCPRegistry = true
+        mcpError = nil
+        do {
+            mcpRegistryResults = try await mcpRegistryClient.search(normalized)
+        } catch is CancellationError {
+            return
+        } catch {
+            mcpRegistryResults = []
+            mcpError = error.localizedDescription
+        }
+        isSearchingMCPRegistry = false
+    }
+
+    @discardableResult
+    func addMCPServer(_ request: MCPInstallationRequest) async -> Bool {
+        guard !isRunningMCPCommand else { return false }
+        isRunningMCPCommand = true
+        defer { isRunningMCPCommand = false }
+
+        do {
+            try await mcpService.add(request)
+            activityMessage =
+                "Added \(request.definition.name) to \(request.agents.count) agent(s)."
+            await refreshMCPServers()
+            return true
+        } catch {
+            activityMessage = "MCP setup failed: \(error.localizedDescription)"
+            await refreshMCPServers()
+            return false
+        }
+    }
+
+    func removeMCPServer(_ server: ConfiguredMCPServer) async {
+        guard !isRunningMCPCommand else { return }
+        isRunningMCPCommand = true
+        defer { isRunningMCPCommand = false }
+
+        do {
+            try await mcpService.remove(server)
+            activityMessage = "Removed \(server.name) from \(server.agent.displayName)."
+            await refreshMCPServers()
+        } catch {
+            activityMessage = "Remove failed: \(error.localizedDescription)"
         }
     }
 
