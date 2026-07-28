@@ -1,6 +1,14 @@
 import SwiftUI
 
 struct MCPServerEditorView: View {
+    private struct InitialValues {
+        let name: String
+        let transport: MCPTransport
+        let command: String
+        let url: String
+        let environment: [MCPEnvironmentEntry]
+    }
+
     @EnvironmentObject private var model: AppModel
     @Environment(\.dismiss) private var dismiss
 
@@ -245,17 +253,29 @@ struct MCPServerEditorView: View {
         }
     }
 
-    private static func initialValues(for server: RegistryMCPServer?) -> (
-        name: String, transport: MCPTransport, command: String, url: String,
-        environment: [MCPEnvironmentEntry]
-    ) {
-        guard let server else { return ("", .stdio, "", "", []) }
+    private static func initialValues(for server: RegistryMCPServer?) -> InitialValues {
+        guard let server else {
+            return InitialValues(
+                name: "", transport: .stdio, command: "", url: "", environment: [])
+        }
         if let remote = server.remotes?.first {
             let transport: MCPTransport = remote.type == "sse" ? .sse : .http
-            return (server.displayName, transport, "", remote.url.absoluteString, [])
+            return InitialValues(
+                name: server.displayName,
+                transport: transport,
+                command: "",
+                url: remote.url.absoluteString,
+                environment: []
+            )
         }
         guard let package = server.preferredPackage else {
-            return (server.displayName, .stdio, "", "", [])
+            return InitialValues(
+                name: server.displayName,
+                transport: .stdio,
+                command: "",
+                url: "",
+                environment: []
+            )
         }
         let command: String
         if package.registryType == "npm" {
@@ -271,6 +291,12 @@ struct MCPServerEditorView: View {
                 isSecret: $0.isSecret ?? false
             )
         }
-        return (server.displayName, .stdio, command, "", environment)
+        return InitialValues(
+            name: server.displayName,
+            transport: .stdio,
+            command: command,
+            url: "",
+            environment: environment
+        )
     }
 }

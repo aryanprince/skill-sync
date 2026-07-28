@@ -67,10 +67,25 @@ struct MCPIntegrationTests {
 
     @Test("Decodes an official registry server envelope")
     func registryServerDecoding() throws {
-        let data = Data(
-            #"{"name":"io.example/files","description":"Files","version":"1.0.0","packages":[{"registryType":"npm","identifier":"example-mcp","version":"1.0.0","transport":{"type":"stdio"},"environmentVariables":[{"name":"API_KEY","isRequired":true,"isSecret":true}]}]}"#
-                .utf8
-        )
+        let json = #"""
+            {
+              "name": "io.example/files",
+              "description": "Files",
+              "version": "1.0.0",
+              "packages": [{
+                "registryType": "npm",
+                "identifier": "example-mcp",
+                "version": "1.0.0",
+                "transport": {"type": "stdio"},
+                "environmentVariables": [{
+                  "name": "API_KEY",
+                  "isRequired": true,
+                  "isSecret": true
+                }]
+              }]
+            }
+            """#
+        let data = Data(json.utf8)
 
         let server = try JSONDecoder().decode(RegistryMCPServer.self, from: data)
 

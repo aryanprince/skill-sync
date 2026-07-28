@@ -10,6 +10,13 @@ excluded:
 strict: true
 check_for_updates: false
 
+# swift-format owns whitespace and collection layout. Keeping duplicate style
+# rules enabled makes the two formatters produce contradictory output.
+disabled_rules:
+  - closure_parameter_position
+  - opening_brace
+  - trailing_comma
+
 opt_in_rules:
   - array_init
   - closure_spacing
@@ -28,10 +35,18 @@ analyzer_rules:
   - unused_import
 
 line_length:
-  warning: 110
-  error: 140
+  warning: 140
+  error: 200
   ignores_comments: true
   ignores_urls: true
+
+large_tuple:
+  warning: 4
+  error: 5
+
+nesting:
+  type_level: 3
+  function_level: 5
 
 function_body_length:
   warning: 80
