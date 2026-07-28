@@ -2,6 +2,7 @@ import SwiftUI
 
 struct MenuBarView: View {
     @EnvironmentObject private var model: AppModel
+    @EnvironmentObject private var updater: AppUpdater
     @Environment(\.openWindow) private var openWindow
 
     var body: some View {
@@ -91,6 +92,10 @@ struct MenuBarView: View {
             }
             .padding(.horizontal, 12)
             .padding(.top, 5)
+
+            CheckForUpdatesButton(updater: updater)
+                .padding(.horizontal, 12)
+                .padding(.top, 5)
 
             Divider()
                 .padding(.top, 9)

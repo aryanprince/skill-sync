@@ -3,11 +3,13 @@ import SwiftUI
 @main
 struct SkillSyncApp: App {
     @StateObject private var model = AppModel()
+    @StateObject private var updater = AppUpdater()
 
     var body: some Scene {
         WindowGroup("Skill Sync", id: "manager") {
             ManagerView()
                 .environmentObject(model)
+                .environmentObject(updater)
         }
         .defaultSize(width: 980, height: 680)
         .commands {
@@ -17,11 +19,16 @@ struct SkillSyncApp: App {
                 }
                 .keyboardShortcut("r", modifiers: .command)
             }
+
+            CommandGroup(after: .appInfo) {
+                CheckForUpdatesButton(updater: updater)
+            }
         }
 
         MenuBarExtra {
             MenuBarView()
                 .environmentObject(model)
+                .environmentObject(updater)
         } label: {
             Label("Skill Sync", systemImage: menuBarSymbol)
         }
@@ -30,6 +37,7 @@ struct SkillSyncApp: App {
         Settings {
             SettingsView()
                 .environmentObject(model)
+                .environmentObject(updater)
         }
     }
 

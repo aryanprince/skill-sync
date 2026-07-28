@@ -2,6 +2,7 @@ import SwiftUI
 
 struct SettingsView: View {
     @EnvironmentObject private var model: AppModel
+    @EnvironmentObject private var updater: AppUpdater
 
     var body: some View {
         Form {
@@ -36,6 +37,11 @@ struct SettingsView: View {
                 LabeledContent("Canonical directory", value: ".agents/skills")
                 LabeledContent("Duplicate handling", value: "Back up, then symlink")
                 LabeledContent("Conflicts", value: "Never modify automatically")
+            }
+
+            Section("Updates") {
+                LabeledContent("Update channel", value: "Stable")
+                CheckForUpdatesButton(updater: updater)
             }
         }
         .formStyle(.grouped)

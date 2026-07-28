@@ -6,6 +6,10 @@
 	objectVersion = 77;
 	objects = {
 
+/* Begin PBXBuildFile section */
+		A71C7FA0301A000100000001 /* Sparkle in Frameworks */ = {isa = PBXBuildFile; productRef = A71C7FA0301A000100000003 /* Sparkle */; };
+/* End PBXBuildFile section */
+
 /* Begin PBXContainerItemProxy section */
 		92E11DF83019510100571B2D /* PBXContainerItemProxy */ = {
 			isa = PBXContainerItemProxy;
@@ -29,9 +33,22 @@
 		92E11E013019510100571B2D /* SkillSyncUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = SkillSyncUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
+/* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
+		A71C7FA0301A000100000004 /* Exceptions for "SkillSync" folder in "SkillSync" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				Info.plist,
+			);
+			target = 92E11DE93019510000571B2D /* SkillSync */;
+		};
+/* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
+
 /* Begin PBXFileSystemSynchronizedRootGroup section */
 		92E11DEC3019510000571B2D /* SkillSync */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+				A71C7FA0301A000100000004 /* Exceptions for "SkillSync" folder in "SkillSync" target */,
+			);
 			path = SkillSync;
 			sourceTree = "<group>";
 		};
@@ -52,6 +69,7 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				A71C7FA0301A000100000001 /* Sparkle in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -112,6 +130,7 @@
 			);
 			name = SkillSync;
 			packageProductDependencies = (
+				A71C7FA0301A000100000003 /* Sparkle */,
 			);
 			productName = SkillSync;
 			productReference = 92E11DEA3019510000571B2D /* SkillSync.app */;
@@ -197,6 +216,9 @@
 			minimizedProjectReferenceProxies = 1;
 			preferredProjectObjectVersion = 77;
 			productRefGroup = 92E11DEB3019510000571B2D /* Products */;
+			packageReferences = (
+				A71C7FA0301A000100000002 /* XCRemoteSwiftPackageReference "Sparkle" */,
+			);
 			projectDirPath = "";
 			projectRoot = "";
 			targets = (
@@ -398,6 +420,7 @@
 				ENABLE_APP_SANDBOX = NO;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = SkillSync/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = "Skill Sync";
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.developer-tools";
 				INFOPLIST_KEY_LSUIElement = YES;
@@ -432,6 +455,7 @@
 				ENABLE_APP_SANDBOX = NO;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = SkillSync/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = "Skill Sync";
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.developer-tools";
 				INFOPLIST_KEY_LSUIElement = YES;
@@ -577,6 +601,25 @@
 			defaultConfigurationName = Release;
 		};
 /* End XCConfigurationList section */
+
+/* Begin XCRemoteSwiftPackageReference section */
+		A71C7FA0301A000100000002 /* XCRemoteSwiftPackageReference "Sparkle" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/sparkle-project/Sparkle";
+			requirement = {
+				kind = exactVersion;
+				version = 2.9.2;
+			};
+		};
+/* End XCRemoteSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		A71C7FA0301A000100000003 /* Sparkle */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = A71C7FA0301A000100000002 /* XCRemoteSwiftPackageReference "Sparkle" */;
+			productName = Sparkle;
+		};
+/* End XCSwiftPackageProductDependency section */
 	};
 	rootObject = 92E11DE23019510000571B2D /* Project object */;
 }
