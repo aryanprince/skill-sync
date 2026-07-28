@@ -58,7 +58,7 @@ struct ManagerView: View {
                     "Workspace Not Found", systemImage: "folder.badge.questionmark")
             }
         case .catalog:
-            CatalogPlaceholderView()
+            CatalogView()
         case .mcpServers:
             MCPPlaceholderView()
         }

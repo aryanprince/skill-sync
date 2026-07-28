@@ -18,11 +18,17 @@ final class AppModel: ObservableObject {
     @Published var pendingPlan: ReconciliationPlan?
     @Published private(set) var lastReceipt: OperationReceipt?
     @Published var activityMessage: String?
+    @Published private(set) var catalogResults: [CatalogSkill] = []
+    @Published private(set) var catalogError: String?
+    @Published private(set) var isSearchingCatalog = false
+    @Published private(set) var isRunningSkillsCommand = false
 
     private let watchedRootsStore: WatchedRootsStore
     private let scanner: WorkspaceScanner
     private let planner: ReconciliationPlanner
     private let executor: ReconciliationExecutor
+    private let catalogClient: SkillsCatalogClient
+    private let skillsCLI: SkillsCLI
     private var hasBootstrapped = false
 
     init(
@@ -34,6 +40,8 @@ final class AppModel: ObservableObject {
         self.scanner = WorkspaceScanner(fileSystem: fileSystem)
         self.planner = ReconciliationPlanner()
         self.executor = ReconciliationExecutor(fileSystem: fileSystem)
+        self.catalogClient = SkillsCatalogClient()
+        self.skillsCLI = SkillsCLI()
     }
 
     var globalWorkspace: Workspace? {
@@ -141,6 +149,59 @@ final class AppModel: ObservableObject {
             await refresh()
         } catch {
             activityMessage = "Undo failed: \(error.localizedDescription)"
+        }
+    }
+
+    func searchCatalog(query: String) async {
+        let normalized = query.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard normalized.count >= 2 else {
+            catalogResults = []
+            catalogError = nil
+            isSearchingCatalog = false
+            return
+        }
+
+        isSearchingCatalog = true
+        catalogError = nil
+        do {
+            catalogResults = try await catalogClient.search(normalized)
+        } catch is CancellationError {
+            return
+        } catch {
+            catalogResults = []
+            catalogError = error.localizedDescription
+        }
+        isSearchingCatalog = false
+    }
+
+    @discardableResult
+    func installCatalogSkill(_ skill: CatalogSkill, target: SkillInstallationTarget) async -> Bool {
+        guard !isRunningSkillsCommand else { return false }
+        isRunningSkillsCommand = true
+        defer { isRunningSkillsCommand = false }
+
+        do {
+            _ = try await skillsCLI.install(skill: skill, target: target)
+            activityMessage = "Installed \(skill.skillID) for Codex and Claude Code."
+            await refresh()
+            return true
+        } catch {
+            activityMessage = "Install failed: \(error.localizedDescription)"
+            return false
+        }
+    }
+
+    func updateSkills(target: SkillInstallationTarget) async {
+        guard !isRunningSkillsCommand else { return }
+        isRunningSkillsCommand = true
+        defer { isRunningSkillsCommand = false }
+
+        do {
+            _ = try await skillsCLI.update(target: target)
+            activityMessage = "Checked \(target.displayName.lowercased()) skills for updates."
+            await refresh()
+        } catch {
+            activityMessage = "Update failed: \(error.localizedDescription)"
         }
     }
 
