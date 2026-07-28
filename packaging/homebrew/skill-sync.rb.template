@@ -1,0 +1,18 @@
+cask "skill-sync" do
+  version "__VERSION__"
+  sha256 "__SHA256__"
+
+  url "https://github.com/aryanprince/skill-sync/releases/download/v#{version}/SkillSync-#{version}.dmg"
+  name "Skill Sync"
+  desc "Keep coding-agent skills and MCP configuration organized"
+  homepage "https://github.com/aryanprince/skill-sync"
+
+  depends_on macos: ">= :sonoma"
+
+  app "SkillSync.app"
+
+  zap trash: [
+    "~/Library/Application Support/Skill Sync",
+    "~/Library/Preferences/io.github.aryanprince.SkillSync.plist",
+  ]
+end

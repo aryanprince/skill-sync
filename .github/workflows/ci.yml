@@ -1,0 +1,73 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  validate:
+    name: Format, lint, test, and build
+    runs-on: macos-15
+    timeout-minutes: 35
+
+    steps:
+      - name: Check out source
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+
+      - name: Install SwiftLint
+        run: brew install swiftlint
+
+      - name: Check formatting
+        run: swift format lint --strict --recursive SkillSync SkillSyncTests SkillSyncUITests
+
+      - name: Lint Swift
+        run: swiftlint lint --strict --reporter github-actions-logging
+
+      - name: Run unit tests
+        run: |
+          xcodebuild \
+            -project SkillSync.xcodeproj \
+            -scheme SkillSync \
+            -destination 'platform=macOS' \
+            -derivedDataPath "$RUNNER_TEMP/SkillSyncDerived" \
+            CODE_SIGNING_ALLOWED=NO \
+            -only-testing:SkillSyncTests \
+            test
+
+      - name: Build universal release app
+        run: |
+          xcodebuild \
+            -project SkillSync.xcodeproj \
+            -scheme SkillSync \
+            -configuration Release \
+            -destination 'generic/platform=macOS' \
+            -derivedDataPath "$RUNNER_TEMP/SkillSyncDerived" \
+            ARCHS='arm64 x86_64' \
+            ONLY_ACTIVE_ARCH=NO \
+            CODE_SIGNING_ALLOWED=NO \
+            build
+
+      - name: Verify and package universal app
+        run: |
+          APP="$RUNNER_TEMP/SkillSyncDerived/Build/Products/Release/SkillSync.app"
+          ARCHS="$(lipo -archs "$APP/Contents/MacOS/SkillSync")"
+          [[ "$ARCHS" == *arm64* && "$ARCHS" == *x86_64* ]]
+          ditto -c -k --keepParent "$APP" "$RUNNER_TEMP/SkillSync-unsigned.zip"
+          echo "Built architectures: $ARCHS"
+
+      - name: Upload unsigned test build
+        uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4 # v5
+        with:
+          name: SkillSync-unsigned-${{ github.sha }}
+          path: ${{ runner.temp }}/SkillSync-unsigned.zip
+          if-no-files-found: error
+          retention-days: 7

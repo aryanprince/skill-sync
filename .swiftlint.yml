@@ -7,6 +7,9 @@ excluded:
   - DerivedData
   - .build
 
+strict: true
+check_for_updates: false
+
 opt_in_rules:
   - array_init
   - closure_spacing
@@ -49,4 +52,3 @@ identifier_name:
   excluded: ["id", "x", "y"]
 
 reporter: xcode
-

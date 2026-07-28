@@ -1,0 +1,198 @@
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Existing v-prefixed tag to release
+        required: true
+        type: string
+
+permissions:
+  contents: write
+  id-token: write
+  attestations: write
+
+concurrency:
+  group: release-${{ inputs.tag || github.ref_name }}
+  cancel-in-progress: false
+
+jobs:
+  release:
+    name: Sign, notarize, and publish
+    runs-on: macos-15
+    timeout-minutes: 45
+    environment: release
+    env:
+      RELEASE_TAG: ${{ inputs.tag || github.ref_name }}
+      GH_TOKEN: ${{ github.token }}
+
+    steps:
+      - name: Check out release tag
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          ref: ${{ inputs.tag || github.ref_name }}
+          fetch-depth: 0
+
+      - name: Validate release version
+        run: |
+          [[ "$RELEASE_TAG" == v* ]]
+          VERSION="${RELEASE_TAG#v}"
+          PROJECT_VERSION="$(xcodebuild -project SkillSync.xcodeproj -scheme SkillSync -showBuildSettings | awk '/MARKETING_VERSION/ { print $3; exit }')"
+          [[ "$VERSION" == "$PROJECT_VERSION" ]]
+          git rev-parse --verify "refs/tags/$RELEASE_TAG"
+          echo "VERSION=$VERSION" >> "$GITHUB_ENV"
+
+      - name: Validate required release secrets
+        env:
+          CERTIFICATE: ${{ secrets.DEVELOPER_ID_APPLICATION_CERTIFICATE_BASE64 }}
+          CERTIFICATE_PASSWORD: ${{ secrets.DEVELOPER_ID_APPLICATION_CERTIFICATE_PASSWORD }}
+          TEAM: ${{ secrets.DEVELOPMENT_TEAM }}
+          API_KEY_ID: ${{ secrets.APPLE_API_KEY_ID }}
+          API_ISSUER: ${{ secrets.APPLE_API_ISSUER_ID }}
+          API_PRIVATE_KEY: ${{ secrets.APPLE_API_PRIVATE_KEY_BASE64 }}
+          SPARKLE_PUBLIC_KEY: ${{ secrets.SPARKLE_PUBLIC_ED_KEY }}
+          SPARKLE_PRIVATE_KEY: ${{ secrets.SPARKLE_PRIVATE_ED_KEY }}
+        run: |
+          for value in CERTIFICATE CERTIFICATE_PASSWORD TEAM API_KEY_ID API_ISSUER API_PRIVATE_KEY SPARKLE_PUBLIC_KEY SPARKLE_PRIVATE_KEY; do
+            [[ -n "${!value}" ]] || { echo "Missing required secret: $value" >&2; exit 1; }
+          done
+
+      - name: Import Developer ID certificate
+        env:
+          CERTIFICATE_BASE64: ${{ secrets.DEVELOPER_ID_APPLICATION_CERTIFICATE_BASE64 }}
+          CERTIFICATE_PASSWORD: ${{ secrets.DEVELOPER_ID_APPLICATION_CERTIFICATE_PASSWORD }}
+        run: |
+          KEYCHAIN_PATH="$RUNNER_TEMP/skill-sync-signing.keychain-db"
+          KEYCHAIN_PASSWORD="$(openssl rand -hex 24)"
+          CERTIFICATE_PATH="$RUNNER_TEMP/developer-id.p12"
+          printf '%s' "$CERTIFICATE_BASE64" | base64 --decode > "$CERTIFICATE_PATH"
+          security create-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          security set-keychain-settings -lut 21600 "$KEYCHAIN_PATH"
+          security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          security import "$CERTIFICATE_PATH" -P "$CERTIFICATE_PASSWORD" -A -t cert -f pkcs12 -k "$KEYCHAIN_PATH"
+          security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          security list-keychains -d user -s "$KEYCHAIN_PATH" login.keychain-db
+          echo "KEYCHAIN_PATH=$KEYCHAIN_PATH" >> "$GITHUB_ENV"
+
+      - name: Embed Sparkle public key
+        env:
+          SPARKLE_PUBLIC_ED_KEY: ${{ secrets.SPARKLE_PUBLIC_ED_KEY }}
+        run: /usr/libexec/PlistBuddy -c "Add :SUPublicEDKey string $SPARKLE_PUBLIC_ED_KEY" SkillSync/Info.plist
+
+      - name: Build signed universal archive
+        env:
+          RELEASE_SIGNING_IDENTITY: Developer ID Application
+          DEVELOPMENT_TEAM: ${{ secrets.DEVELOPMENT_TEAM }}
+        run: Scripts/build-release.sh "$RUNNER_TEMP/release"
+
+      - name: Notarize and staple app
+        env:
+          APPLE_API_KEY_ID: ${{ secrets.APPLE_API_KEY_ID }}
+          APPLE_API_ISSUER_ID: ${{ secrets.APPLE_API_ISSUER_ID }}
+          APPLE_API_PRIVATE_KEY_BASE64: ${{ secrets.APPLE_API_PRIVATE_KEY_BASE64 }}
+        run: |
+          APP="$RUNNER_TEMP/release/SkillSync.xcarchive/Products/Applications/SkillSync.app"
+          KEY_PATH="$RUNNER_TEMP/AuthKey_$APPLE_API_KEY_ID.p8"
+          NOTARIZATION_ZIP="$RUNNER_TEMP/SkillSync-notarization.zip"
+          printf '%s' "$APPLE_API_PRIVATE_KEY_BASE64" | base64 --decode > "$KEY_PATH"
+          codesign --verify --deep --strict --verbose=2 "$APP"
+          ditto -c -k --keepParent "$APP" "$NOTARIZATION_ZIP"
+          xcrun notarytool submit "$NOTARIZATION_ZIP" \
+            --key "$KEY_PATH" \
+            --key-id "$APPLE_API_KEY_ID" \
+            --issuer "$APPLE_API_ISSUER_ID" \
+            --wait
+          xcrun stapler staple "$APP"
+          xcrun stapler validate "$APP"
+
+      - name: Create update archive and DMG
+        run: |
+          APP="$RUNNER_TEMP/release/SkillSync.xcarchive/Products/Applications/SkillSync.app"
+          ZIP="$RUNNER_TEMP/release/SkillSync-$VERSION.zip"
+          DMG="$RUNNER_TEMP/release/SkillSync-$VERSION.dmg"
+          ditto -c -k --keepParent "$APP" "$ZIP"
+          Scripts/create-dmg.sh "$APP" "$DMG"
+          echo "ZIP_PATH=$ZIP" >> "$GITHUB_ENV"
+          echo "DMG_PATH=$DMG" >> "$GITHUB_ENV"
+
+      - name: Notarize and staple DMG
+        env:
+          APPLE_API_KEY_ID: ${{ secrets.APPLE_API_KEY_ID }}
+          APPLE_API_ISSUER_ID: ${{ secrets.APPLE_API_ISSUER_ID }}
+        run: |
+          KEY_PATH="$RUNNER_TEMP/AuthKey_$APPLE_API_KEY_ID.p8"
+          xcrun notarytool submit "$DMG_PATH" \
+            --key "$KEY_PATH" \
+            --key-id "$APPLE_API_KEY_ID" \
+            --issuer "$APPLE_API_ISSUER_ID" \
+            --wait
+          xcrun stapler staple "$DMG_PATH"
+          xcrun stapler validate "$DMG_PATH"
+
+      - name: Generate signed Sparkle appcast
+        env:
+          SPARKLE_PRIVATE_ED_KEY: ${{ secrets.SPARKLE_PRIVATE_ED_KEY }}
+        run: |
+          UPDATES_DIR="$RUNNER_TEMP/updates"
+          mkdir -p "$UPDATES_DIR"
+          cp "$ZIP_PATH" "$UPDATES_DIR/"
+          cp appcast.xml "$UPDATES_DIR/appcast.xml"
+          GENERATE_APPCAST="$RUNNER_TEMP/release/DerivedData/SourcePackages/artifacts/sparkle/Sparkle/bin/generate_appcast"
+          printf '%s' "$SPARKLE_PRIVATE_ED_KEY" | "$GENERATE_APPCAST" \
+            --ed-key-file - \
+            --download-url-prefix "https://github.com/${GITHUB_REPOSITORY}/releases/download/$RELEASE_TAG/" \
+            --link "https://github.com/${GITHUB_REPOSITORY}/releases/tag/$RELEASE_TAG" \
+            --maximum-versions 10 \
+            "$UPDATES_DIR"
+          echo "APPCAST_PATH=$UPDATES_DIR/appcast.xml" >> "$GITHUB_ENV"
+
+      - name: Generate Homebrew cask
+        run: |
+          CASK_PATH="$RUNNER_TEMP/skill-sync.rb"
+          DMG_SHA256="$(shasum -a 256 "$DMG_PATH" | awk '{ print $1 }')"
+          sed \
+            -e "s/__VERSION__/$VERSION/g" \
+            -e "s/__SHA256__/$DMG_SHA256/g" \
+            packaging/homebrew/skill-sync.rb.template > "$CASK_PATH"
+          echo "CASK_PATH=$CASK_PATH" >> "$GITHUB_ENV"
+
+      - name: Publish GitHub Release
+        run: |
+          gh release create "$RELEASE_TAG" \
+            "$ZIP_PATH" \
+            "$DMG_PATH" \
+            "$APPCAST_PATH" \
+            "$CASK_PATH" \
+            --verify-tag \
+            --generate-notes \
+            --title "Skill Sync $VERSION"
+
+      - name: Attest release artifacts
+        uses: actions/attest-build-provenance@43d14bc2b83dec42d39ecae14e916627a18bb661 # v3
+        with:
+          subject-path: |
+            ${{ env.ZIP_PATH }}
+            ${{ env.DMG_PATH }}
+
+      - name: Publish Sparkle feed to main
+        run: |
+          GENERATED_APPCAST="$RUNNER_TEMP/generated-appcast.xml"
+          cp "$APPCAST_PATH" "$GENERATED_APPCAST"
+          git fetch origin main
+          git switch main
+          cp "$GENERATED_APPCAST" appcast.xml
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add appcast.xml
+          git diff --cached --quiet || git commit -m "chore(release): update appcast for $RELEASE_TAG"
+          git push origin main
+
+      - name: Remove temporary signing keychain
+        if: always()
+        run: |
+          if [[ -n "${KEYCHAIN_PATH:-}" && -f "$KEYCHAIN_PATH" ]]; then
+            security delete-keychain "$KEYCHAIN_PATH"
+          fi

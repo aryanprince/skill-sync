@@ -1,28 +1,88 @@
 # Skill Sync
 
-Skill Sync is a native macOS menu bar app for keeping coding-agent skills and
-MCP server configurations organized. It treats `.agents/skills` as the
-canonical skill location and reconciles agent-specific directories without
-silently overwriting divergent content.
+Skill Sync is a native macOS menu bar app that keeps coding-agent skills and MCP
+servers organized. It uses `.agents/skills` as the canonical location, links
+Claude Code back to that source of truth, and previews every filesystem change
+before it runs.
 
-The first release targets Codex and Claude Code on macOS 14 or later.
+The initial release supports Codex, Claude Code, macOS 14+, and both Apple
+Silicon and Intel Macs.
 
-## Status
+## What it does
 
-Skill Sync is under active development. Filesystem-changing actions are being
-built around previews, verification, backups, and Undo.
+- Scans user-selected project folders plus global agent directories.
+- Finds physical duplicates, healthy links, broken links, and divergent skill
+  conflicts across `.agents`, `.claude`, and legacy `.codex` locations.
+- Moves a selected skill to `.agents/skills`, creates relative symlinks for
+  compatible agent directories, and keeps recoverable backups.
+- Searches [skills.sh](https://skills.sh), installs with a pinned `skills` CLI,
+  and checks global or project skills for updates.
+- Lists Codex and Claude Code MCP servers and searches the official
+  [MCP Registry](https://registry.modelcontextprotocol.io).
+- Adds and removes MCP servers through the agents' own CLIs. Secret fields are
+  masked in the UI and redacted from command output.
+- Updates non-Homebrew installations through
+  [Sparkle 2](https://sparkle-project.org).
 
-## Development
+Skill Sync does not make a divergent-content decision automatically. Conflicts
+remain untouched until the user chooses what should become canonical.
 
-Requirements:
+## Current credential model
 
-- macOS 14 or later
-- Xcode 26 or later
-- Swift 6
+Version 0.1 stores MCP values in the configuration format already consumed by
+Codex or Claude Code. That means credentials are plain text. Project-scoped
+credentials receive an explicit warning because `.mcp.json` or `.codex` may be
+tracked by Git.
 
-Build and test:
+Keychain-backed credentials and environment-manager integration are deliberately
+outside the initial scope. See [SECURITY.md](SECURITY.md) for the exact safety
+boundary.
+
+## Requirements
+
+- macOS 14 Sonoma or later
+- Xcode 26 or later for development
+- Node.js with `npx` available for skills.sh installation and updates
+- The Codex and/or Claude Code CLI for the corresponding MCP operations
+
+The app itself is SwiftUI/AppKit and has no web runtime, persistent database, or
+background helper. Sparkle is the only bundled third-party runtime dependency.
+
+## Build from source
+
+Clone the repository and open `SkillSync.xcodeproj`, or stay entirely in the
+terminal:
 
 ```sh
+git clone https://github.com/aryanprince/skill-sync.git
+cd skill-sync
+xcodebuild \
+  -project SkillSync.xcodeproj \
+  -scheme SkillSync \
+  -destination 'platform=macOS' \
+  -derivedDataPath /tmp/SkillSyncDerived \
+  CODE_SIGNING_ALLOWED=NO \
+  build
+open /tmp/SkillSyncDerived/Build/Products/Debug/SkillSync.app
+```
+
+Xcode is not required to scaffold or build subsequent changes. The checked-in
+project and shared Swift Package resolution make CLI builds deterministic.
+
+## Development checks
+
+Run the same validation used by CI:
+
+```sh
+brew install swiftlint
+Scripts/ci.sh
+```
+
+Individual checks:
+
+```sh
+swift format lint --strict --recursive SkillSync SkillSyncTests SkillSyncUITests
+swiftlint lint --strict
 xcodebuild test \
   -project SkillSync.xcodeproj \
   -scheme SkillSync \
@@ -30,19 +90,34 @@ xcodebuild test \
   CODE_SIGNING_ALLOWED=NO
 ```
 
-Check formatting:
+`swift format` handles deterministic formatting. SwiftLint adds semantic style
+rules, while the Swift compiler provides type checking and strict concurrency
+checking. Swift Testing is used for unit tests.
 
-```sh
-swift format lint --strict --recursive SkillSync SkillSyncTests SkillSyncUITests
+## Project map
+
+```text
+SkillSync/
+  Application/       App state and navigation
+  Domain/            Agent-neutral models and plans
+  Infrastructure/    Scanning, filesystem, process, persistence
+  Integrations/      Agent, skills.sh, MCP Registry, Sparkle adapters
+  Views/              SwiftUI manager, menu bar, sheets, settings
+Scripts/              CI and release packaging
+packaging/homebrew/   Generated-cask template
 ```
 
-## Security
+See [Architecture](docs/ARCHITECTURE.md), [Contributing](CONTRIBUTING.md), and
+[Releasing](docs/RELEASING.md) for the deeper implementation and maintenance
+guides.
 
-Skill Sync never applies a divergent-skill resolution without an explicit
-choice. MCP credentials are plain text in the initial release and are redacted
-from the app's logs and activity history. See [SECURITY.md](SECURITY.md).
+## Distribution status
+
+The repository can already produce and test an unsigned universal app. Public
+DMG and Homebrew distribution remain gated on a Developer ID certificate and
+Apple notarization. The release workflow is prepared but no paid Apple Developer
+account or signing material is stored in this repository.
 
 ## License
 
-MIT
-
+[MIT](LICENSE) © 2026 Skill Sync Contributors
